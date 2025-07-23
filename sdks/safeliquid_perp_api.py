@@ -1,3 +1,5 @@
+import asyncio
+import time
 from dataclasses import dataclass
 from typing import List, Optional
 from decimal import Decimal
@@ -239,3 +241,21 @@ class PerpApi:
         if int(value) == 0:
             return Decimal(0)
         return Decimal(value) / Decimal(10 ** decimals)
+
+    async def wait_for_order_on_chain(self,sub_account: str, expected_order_id, timeout=60, interval=0.2):
+        start = time.time()
+        while time.time() - start < timeout:
+            orders = self.user_active_orders(sub_account)
+            if any(order.order_id == expected_order_id for order in orders):
+                return True
+            await asyncio.sleep(interval)
+        return False
+
+    async def wait_for_order_off_chain(self,sub_account: str, expected_order_id, timeout=60, interval=0.2):
+        start = time.time()
+        while time.time() - start < timeout:
+            orders = self.user_active_orders(sub_account)
+            if all(order.order_id != expected_order_id for order in orders):
+                return True
+            await asyncio.sleep(interval)
+        return False

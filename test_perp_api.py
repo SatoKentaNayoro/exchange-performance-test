@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import asyncio
 import os
 import json
 
@@ -39,6 +40,12 @@ def test_place_perp_order():
 def test_cancel_order():
     tx = api.cancel_order(account, sub_account, 5)
     print("tx hash:", "0x" + tx.hex())
+
+async def test_cancel_all_orders():
+    orders = api.user_active_orders(sub_account)
+    for order in orders:
+        api.cancel_order(account, sub_account, order.order_id)
+        # await api.wait_for_order_off_chain(sub_account, order.order_id)
 
 def test_close_position():
     price = api.amount_from_chain(api.market.oracle_price, api.b_market.token_a_decimal)
@@ -101,7 +108,8 @@ if __name__ == "__main__":
     # test_withdraw()
     # test_calc_value()
     # test_deposit()
-    test_place_perp_order()
+    # test_place_perp_order()
     # test_cancel_order()
     # test_set_profit_and_loss_point()
     # test_close_position()
+    asyncio.run(test_cancel_all_orders())

@@ -27,7 +27,7 @@ class SafeliquidExchange(BaseExchange):
             abi = json.load(f)
 
         self.api = PerpApi(
-            rpc="https://ultra-test-node-rpc.bool.network",
+            rpc="http://192.168.200.11:9923",
             market_id=market_id,
             abi=abi
         )
@@ -125,6 +125,7 @@ class SafeliquidExchange(BaseExchange):
                     'exchange': 'Safeliquid'
                 })
 
+                # await self.api.wait_for_order_on_chain(self.sub_account, self.latest_order_id)
                 # Cancel order
                 await self._cancel_order(self.latest_order_id)
             else:
