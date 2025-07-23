@@ -6,7 +6,6 @@ from decimal import Decimal
 
 PERP_CONTRACT_ADDRESS = "0x000000000000000000000000000000000000044E"
 
-
 @dataclass
 class PerpPosition:
     market_id: int
@@ -23,7 +22,6 @@ class PerpPosition:
     owner: str
     take_profit: int
     stop_loss: int
-
 
 @dataclass
 class PerpOrder:
@@ -47,7 +45,6 @@ class PerpOrder:
     take_profit: Optional[int] = None
     stop_loss: Optional[int] = None
 
-
 @dataclass
 class ActiveOrder:
     owner: str
@@ -58,13 +55,11 @@ class ActiveOrder:
     price: int
     created_at: int
 
-
 @dataclass
 class Token:
     address: str
     decimals: int
     symbol: str
-
 
 @dataclass
 class PerpMarket:
@@ -84,7 +79,6 @@ class PerpMarket:
     fallback_if_dlob_price_invalid: bool
     maintenance_margin_ratio: int
 
-
 class PerpApi:
     def __init__(self, rpc: str, market_id: int, abi: list):
         self.web3 = Web3(Web3.HTTPProvider(rpc))
@@ -93,13 +87,9 @@ class PerpApi:
         self.contract = self.web3.eth.contract(address=PERP_CONTRACT_ADDRESS, abi=abi)
         self.market = self.perp_markets()
         self.b_market = self.perp_b_markets()
-        self.token = Token(address=self.market.token_a_address, decimals=self.market.token_a_decimal,
-                           symbol=self.market.token_a)
+        self.token = Token(address=self.market.token_a_address, decimals=self.market.token_a_decimal, symbol=self.market.token_a)
 
-    def place_perp_order(self, account, subaccount: str, is_long: bool, size: float, price: float, order_type: int,
-                         leverage: int, take_profit: float, stop_loss: float, nonce: int | None):
-        if nonce is None:
-            nonce = self.web3.eth.get_transaction_count(account.address)
+    def place_perp_order(self, account, subaccount: str, is_long: bool, size: float, price: float, order_type: int, leverage: int, take_profit: float, stop_loss: float):
         txn = self.contract.functions.placePerpOrder(
             subaccount,
             self.market_id,
@@ -112,31 +102,28 @@ class PerpApi:
             self.amount_to_chain(stop_loss, self.b_market.token_a_decimal)
         ).build_transaction({
             'from': account.address,
-            'nonce': nonce,
+            'nonce': self.web3.eth.get_transaction_count(account.address),
         })
         gas = self.web3.eth.estimate_gas(txn)
         txn['gas'] = gas * 2
         signed = account.sign_transaction(txn)
         tx_hash = self.web3.eth.send_raw_transaction(signed.raw_transaction)
-        return {"tx_hash": tx_hash, "nonce": nonce}
+        return tx_hash
 
-    def cancel_order(self, account, subaccount: str, order_id: int, nonce: int | None):
-        if nonce is None:
-            nonce = self.web3.eth.get_transaction_count(account.address)
-
+    def cancel_order(self, account, subaccount: str, order_id: int):
         txn = self.contract.functions.cancelOrder(
             subaccount,
             self.market_id,
             order_id
         ).build_transaction({
             'from': account.address,
-            'nonce': nonce,
+            'nonce': self.web3.eth.get_transaction_count(account.address),
         })
         gas = self.web3.eth.estimate_gas(txn)
         txn['gas'] = gas * 2
         signed = account.sign_transaction(txn)
         tx_hash = self.web3.eth.send_raw_transaction(signed.raw_transaction)
-        return {"tx_hash": tx_hash, "nonce": nonce}
+        return tx_hash
 
     def close_position(self, account, subaccount: str, price: float, slippage: int):
         txn = self.contract.functions.closePosition(
