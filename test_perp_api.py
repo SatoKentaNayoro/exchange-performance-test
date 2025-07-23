@@ -20,7 +20,7 @@ def mock_abi():
     return abi
 
 api = PerpApi(
-    rpc="https://ultra-test-node-rpc.bool.network",
+    rpc="http://192.168.200.11:9923",
     market_id=1,
     abi=mock_abi()
 )
@@ -45,7 +45,7 @@ async def test_cancel_all_orders():
     orders = api.user_active_orders(sub_account)
     for order in orders:
         api.cancel_order(account, sub_account, order.order_id)
-        # await api.wait_for_order_off_chain(sub_account, order.order_id)
+        await api.wait_for_order_off_chain(sub_account, order.order_id)
 
 def test_close_position():
     price = api.amount_from_chain(api.market.oracle_price, api.b_market.token_a_decimal)
