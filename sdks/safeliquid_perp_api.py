@@ -6,6 +6,8 @@ from decimal import Decimal
 from web3 import Web3
 from decimal import Decimal
 
+from src.logger import get_logger
+
 PERP_CONTRACT_ADDRESS = "0x000000000000000000000000000000000000044E"
 
 @dataclass
@@ -91,7 +93,10 @@ class PerpApi:
         self.b_market = self.perp_b_markets()
         self.token = Token(address=self.market.token_a_address, decimals=self.market.token_a_decimal, symbol=self.market.token_a)
 
-    def place_perp_order(self, account, subaccount: str, is_long: bool, size: float, price: float, order_type: int, leverage: int, take_profit: float, stop_loss: float):
+    def place_perp_order(self, account, subaccount: str, is_long: bool, size: float, price: float, order_type: int, leverage: int, take_profit: float, stop_loss: float, nonce: int | None):
+        if nonce is None:
+            nonce = self.web3.eth.get_transaction_count(account.address, 'pending')
+
         txn = self.contract.functions.placePerpOrder(
             subaccount,
             self.market_id,
@@ -104,7 +109,8 @@ class PerpApi:
             self.amount_to_chain(stop_loss, self.b_market.token_a_decimal)
         ).build_transaction({
             'from': account.address,
-            'nonce': self.web3.eth.get_transaction_count(account.address),
+            'nonce': nonce,
+            'gas': 500_000,
         })
         gas = self.web3.eth.estimate_gas(txn)
         txn['gas'] = gas * 2
@@ -112,19 +118,28 @@ class PerpApi:
         tx_hash = self.web3.eth.send_raw_transaction(signed.raw_transaction)
         return tx_hash
 
-    def cancel_order(self, account, subaccount: str, order_id: int):
+    def cancel_order(self, account, subaccount: str, order_id: int, nonce: int | None):
+        logger = get_logger("api")
+        if nonce is None:
+            nonce = self.web3.eth.get_transaction_count(account.address, 'pending')
+        logger.info("step 1")
         txn = self.contract.functions.cancelOrder(
             subaccount,
             self.market_id,
             order_id
         ).build_transaction({
             'from': account.address,
-            'nonce': self.web3.eth.get_transaction_count(account.address),
+            'nonce': nonce,
+            'gas': 500_000,
         })
-        gas = self.web3.eth.estimate_gas(txn)
+        logger.info("step 2")
+        gas = self.web3.eth.estimate_gas(txn, 'pending')
+        logger.info("step 3")
         txn['gas'] = gas * 2
         signed = account.sign_transaction(txn)
+        logger.info("step 4")
         tx_hash = self.web3.eth.send_raw_transaction(signed.raw_transaction)
+        logger.info("step 5")
         return tx_hash
 
     def close_position(self, account, subaccount: str, price: float, slippage: int):
@@ -242,10 +257,13 @@ class PerpApi:
             return Decimal(0)
         return Decimal(value) / Decimal(10 ** decimals)
 
-    async def wait_for_order_on_chain(self,sub_account: str, expected_order_id, timeout=60, interval=0.2):
+    async def wait_for_order_on_chain(self,sub_account: str, expected_order_id, timeout=1, interval=0.2):
+        logger = get_logger("api")
         start = time.time()
+        loop = asyncio.get_event_loop()
         while time.time() - start < timeout:
-            orders = self.user_active_orders(sub_account)
+            orders = await loop.run_in_executor(None, self.user_active_orders, sub_account)
+            logger.info(f"orders: {orders}, expected_order_id: {expected_order_id}")
             if any(order.order_id == expected_order_id for order in orders):
                 return True
             await asyncio.sleep(interval)

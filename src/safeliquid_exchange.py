@@ -4,6 +4,10 @@ import time
 from decimal import Decimal
 
 import requests
+import asyncio
+from collections import deque
+
+import requests
 
 from sdks.safeliquid_perp_api import PerpApi
 from .base_exchange import BaseExchange, APIMode
@@ -33,7 +37,13 @@ class SafeliquidExchange(BaseExchange):
         )
 
         latest_order_id = self.fetch_first_order_id_from_api(self.sub_account, market_id)
+        self.logger.info(f"latest_order_id: {latest_order_id}")
         self.latest_order_id = latest_order_id
+        self.nonce_queue = deque()
+        self.nonce_lock = asyncio.Lock()
+        current_nonce = self.api.web3.eth.get_transaction_count(self.account.address)
+        for i in range(1000):
+            self.nonce_queue.append(current_nonce + i)
 
     def fetch_first_order_id_from_api(self, address, market_id):
         """
@@ -50,6 +60,9 @@ class SafeliquidExchange(BaseExchange):
         if items:
             return items[0].get("order_id", 0)
         return 0
+
+    def get_next_nonce(self):
+        return self.nonce_queue.popleft()
 
     def _get_tick_size(self, asset: str = "BTC") -> float:
         """Get the correct tick size for Safeliquid assets"""
@@ -73,7 +86,8 @@ class SafeliquidExchange(BaseExchange):
             try:
                 self.logger.debug(f"Getting current price for {self.api.token.symbol}")
                 # Get the current market price
-                price = self.api.amount_from_chain(self.api.perp_markets().oracle_price, self.api.b_market.token_a_decimal)
+                price = self.api.amount_from_chain(self.api.perp_markets().oracle_price,
+                                                   self.api.b_market.token_a_decimal)
                 self.latest_price = price
                 self.logger.debug(f"Got current price for {self.api.token.symbol}: {self.latest_price}")
 
@@ -95,6 +109,8 @@ class SafeliquidExchange(BaseExchange):
 
         try:
             # Place order
+            # nonce = self.get_next_nonce()
+            # self.logger.info(f"Placing order with nonce {nonce}")
             result = self.api.place_perp_order(
                 account=self.account,
                 subaccount=self.sub_account,
@@ -104,7 +120,8 @@ class SafeliquidExchange(BaseExchange):
                 order_type=0,
                 leverage=10,
                 take_profit=0,
-                stop_loss=0
+                stop_loss=0,
+                nonce=None
             )
             place_latency = time.time() - start_time
 
@@ -118,16 +135,19 @@ class SafeliquidExchange(BaseExchange):
 
                 # Try to cancel order immediately
                 self.latest_order_id += 1
+                latest_order_id = self.latest_order_id
                 # Track for cleanup
                 self.open_orders.append({
-                    'id': self.latest_order_id,
+                    'id': latest_order_id,
                     'asset': self.api.token.symbol,
                     'exchange': 'Safeliquid'
                 })
 
-                # await self.api.wait_for_order_on_chain(self.sub_account, self.latest_order_id)
+                # self.logger.info(f"Before wait, latest_order_id: {latest_order_id}")
+                # await self.api.wait_for_order_on_chain(self.sub_account, latest_order_id)
                 # Cancel order
-                await self._cancel_order(self.latest_order_id)
+                self.logger.info(f"Cancelling order: {latest_order_id}")
+                self._cancel_order(latest_order_id)
             else:
                 self.failure_data.place_order_failures += 1
                 error_msg = result.get("error", "Unknown error") if result else "No result returned"
@@ -140,13 +160,15 @@ class SafeliquidExchange(BaseExchange):
             self.failure_data.place_order_failures += 1
             self.logger.error(f"Unexpected error during order placement: {e}", exc_info=True)
 
-    async def _cancel_order(self, order_id: int) -> None:
+    def _cancel_order(self, order_id: int) -> None:
         """Cancel a specific order and log the result"""
         self.failure_data.cancel_order_total += 1
         cancel_start_time = time.time()
 
         try:
-            cancel_result = self.api.cancel_order(self.account, self.sub_account, order_id)
+            # nonce = self.get_next_nonce()
+            # self.logger.info(f"Cancelling order with nonce: {nonce}")
+            cancel_result = self.api.cancel_order(self.account, self.sub_account, order_id, None)
             cancel_latency = time.time() - cancel_start_time
 
             # Always record total cancel latency
@@ -178,8 +200,9 @@ class SafeliquidExchange(BaseExchange):
 
         for order in self.open_orders[:]:
             try:
-                result = self.api.cancel_order(self.account, self.sub_account, order['id'])
-                if result and result.get("status") == "ok":
+                # nonce = self.get_next_nonce()
+                result = self.api.cancel_order(self.account, self.sub_account, order['id'], None)
+                if result:
                     self.open_orders.remove(order)
                     self.logger.info(f"Successfully cancelled order {order['id']} during cleanup")
                 else:

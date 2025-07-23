@@ -44,7 +44,7 @@ def test_cancel_order():
 async def test_cancel_all_orders():
     orders = api.user_active_orders(sub_account)
     for order in orders:
-        api.cancel_order(account, sub_account, order.order_id)
+        api.cancel_order(account, sub_account, order.order_id, None)
         await api.wait_for_order_off_chain(sub_account, order.order_id)
 
 def test_close_position():
