@@ -21,7 +21,6 @@ def mock_abi():
 api = PerpApi(
     rpc="https://ultra-test-node-rpc.bool.network",
     market_id=1,
-    token=mock_token(),
     abi=mock_abi()
 )
 
@@ -102,7 +101,7 @@ if __name__ == "__main__":
     # test_withdraw()
     # test_calc_value()
     # test_deposit()
-    # test_place_perp_order()
+    test_place_perp_order()
     # test_cancel_order()
     # test_set_profit_and_loss_point()
-    test_close_position()
+    # test_close_position()

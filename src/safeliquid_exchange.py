@@ -1,28 +1,55 @@
+import json
+import os
 import time
-import eth_account
-from eth_account.signers.local import LocalAccount
-from hyperliquid.info import Info
-from hyperliquid.exchange import Exchange
+from decimal import Decimal
+
+import requests
+
+from sdks.safeliquid_perp_api import PerpApi
 from .base_exchange import BaseExchange, APIMode
 from .config import ORDER_SIZE_BTC, MARKET_OFFSET, SAFELIQUID_CONFIG
+from web3 import Web3
 
 
 class SafeliquidExchange(BaseExchange):
     """Safeliquid REST API implementation"""
 
-    def __init__(self, wallet_address: str, private_key: str, market_id: int | None = None):
+    def __init__(self, sub_account: str, private_key: str, market_id: int):
         super().__init__("Safeliquid", APIMode.REST)
 
         self.logger.info("Initializing Safeliquid exchange")
 
-        self.wallet_address = wallet_address
-        self.private_key = private_key
-        self.market_id = market_id
-        self.info = Info("https://ultra-test-node-rpc.bool.network", skip_ws=True)
+        self.sub_account = sub_account
+        self.account = Web3().eth.account.from_key(private_key)
 
-        # Create LocalAccount for signing
-        self.account: LocalAccount = eth_account.Account.from_key(private_key)
-        self.exchange = Exchange(self.account, "https://ultra-test-node-rpc.bool.network", account_address=wallet_address)
+        abi_path = os.path.join(os.path.dirname(__file__), "../abis/perp_abi.json")
+        with open(abi_path, "r") as f:
+            abi = json.load(f)
+
+        self.api = PerpApi(
+            rpc="https://ultra-test-node-rpc.bool.network",
+            market_id=market_id,
+            abi=abi
+        )
+
+        latest_order_id = self.fetch_first_order_id_from_api(self.sub_account, market_id)
+        self.latest_order_id = latest_order_id
+
+    def fetch_first_order_id_from_api(self, address, market_id):
+        """
+        xbit testnet API
+        :param address: str
+        :param market_id: int
+        :return: int or None
+        """
+        url = f"https://testnet.xbit.finance/perp/blockchain/perp/user-orders?address={address}&market_id={market_id}&page_number=1&pageSize=1000"
+        resp = requests.get(url, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+        items = data.get("data", {}).get("items", [])
+        if items:
+            return items[0].get("order_id", 0)
+        return 0
 
     def _get_tick_size(self, asset: str = "BTC") -> float:
         """Get the correct tick size for Safeliquid assets"""
@@ -37,29 +64,21 @@ class SafeliquidExchange(BaseExchange):
 
     async def test_order_latency(self) -> None:
         """Test Safeliquid order placement and cancellation latency"""
-        if not self.exchange:
-            self.logger.warning("No exchange available for order test")
+        if not self.api:
+            self.logger.warning("No api available for order test")
             return
 
         # Get current price directly from info API
         if not self.latest_price:
             try:
-                self.logger.debug(f"Getting current price for {self.asset}")
+                self.logger.debug(f"Getting current price for {self.api.token.symbol}")
                 # Get the current market price
-                meta = self.info.meta()
-                universe = meta.get('universe', [])
-
-                for token_info in universe:
-                    if token_info.get('name') == self.asset:
-                        # Get the mark price (current market price)
-                        all_mids = self.info.all_mids()
-                        if self.asset in all_mids:
-                            self.latest_price = float(all_mids[self.asset])
-                            self.logger.debug(f"Got current price for {self.asset}: {self.latest_price}")
-                            break
+                price = self.api.amount_from_chain(self.api.perp_markets().oracle_price, self.api.b_market.token_a_decimal)
+                self.latest_price = price
+                self.logger.debug(f"Got current price for {self.api.token.symbol}: {self.latest_price}")
 
                 if not self.latest_price:
-                    self.logger.error(f"Failed to get current price for {self.asset}")
+                    self.logger.error(f"Failed to get current price for {self.api.token.symbol}")
                     return
 
             except Exception as e:
@@ -67,52 +86,47 @@ class SafeliquidExchange(BaseExchange):
                 return
 
         # Place order 5% below market to avoid execution
-        raw_price = self.latest_price * MARKET_OFFSET
-        price = self._round_to_tick_size(raw_price, self.asset)
-
-        self.logger.debug(f"Placing order: {ORDER_SIZE_BTC} {self.asset} at {price}")
+        # raw_price = self.latest_price * Decimal(str(1 - self.api.amount_from_chain(self.api.market.max_deviation_bps, 4)))
+        raw_price = self.latest_price * Decimal(str(MARKET_OFFSET))
+        self.logger.debug(f"Placing order: {ORDER_SIZE_BTC} {self.api.token.symbol} at {raw_price}")
 
         self.failure_data.place_order_total += 1
         start_time = time.time()
 
         try:
             # Place order
-            result = self.exchange.order(
-                name=self.asset,
-                is_buy=True,
-                sz=ORDER_SIZE_BTC,
-                limit_px=price,
-                order_type={"limit": {"tif": "Gtc"}},
-                reduce_only=False
+            result = self.api.place_perp_order(
+                account=self.account,
+                subaccount=self.sub_account,
+                is_long=True,
+                size=ORDER_SIZE_BTC,
+                price=raw_price,
+                order_type=0,
+                leverage=10,
+                take_profit=0,
+                stop_loss=0
             )
             place_latency = time.time() - start_time
 
             # Always record total request latency
             self.latency_data.place_order_total.append(place_latency)
-
-            if result and result.get("status") == "ok":
+            if result:
                 # Record success-only latency
                 self.latency_data.place_order.append(place_latency)
 
                 self.logger.debug(f"Order placed successfully in {place_latency:.4f}s")
 
                 # Try to cancel order immediately
-                statuses = result.get("response", {}).get("data", {}).get("statuses", [])
-                if statuses and "resting" in statuses[0]:
-                    order_id = statuses[0]["resting"]["oid"]
+                self.latest_order_id += 1
+                # Track for cleanup
+                self.open_orders.append({
+                    'id': self.latest_order_id,
+                    'asset': self.api.token.symbol,
+                    'exchange': 'Safeliquid'
+                })
 
-                    # Track for cleanup
-                    self.open_orders.append({
-                        'id': order_id,
-                        'asset': self.asset,
-                        'exchange': 'Safeliquid'
-                    })
-
-                    # Cancel order
-                    await self._cancel_order(order_id)
-                else:
-                    self.failure_data.place_order_failures += 1
-                    self.logger.warning("Order status not resting, cannot cancel")
+                # Cancel order
+                await self._cancel_order(self.latest_order_id)
             else:
                 self.failure_data.place_order_failures += 1
                 error_msg = result.get("error", "Unknown error") if result else "No result returned"
@@ -125,19 +139,19 @@ class SafeliquidExchange(BaseExchange):
             self.failure_data.place_order_failures += 1
             self.logger.error(f"Unexpected error during order placement: {e}", exc_info=True)
 
-    async def _cancel_order(self, order_id: str) -> None:
+    async def _cancel_order(self, order_id: int) -> None:
         """Cancel a specific order and log the result"""
         self.failure_data.cancel_order_total += 1
         cancel_start_time = time.time()
 
         try:
-            cancel_result = self.exchange.cancel(self.asset, int(order_id))
+            cancel_result = self.api.cancel_order(self.account, self.sub_account, order_id)
             cancel_latency = time.time() - cancel_start_time
 
             # Always record total cancel latency
             self.latency_data.cancel_order_total.append(cancel_latency)
 
-            if cancel_result and cancel_result.get("status") == "ok":
+            if cancel_result:
                 # Record success-only cancel latency
                 self.latency_data.cancel_order.append(cancel_latency)
                 self.open_orders = [o for o in self.open_orders if o['id'] != order_id]
@@ -163,7 +177,7 @@ class SafeliquidExchange(BaseExchange):
 
         for order in self.open_orders[:]:
             try:
-                result = self.exchange.cancel(order['asset'], int(order['id']))
+                result = self.api.cancel_order(self.account, self.sub_account, order['id'])
                 if result and result.get("status") == "ok":
                     self.open_orders.remove(order)
                     self.logger.info(f"Successfully cancelled order {order['id']} during cleanup")

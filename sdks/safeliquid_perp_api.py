@@ -80,14 +80,14 @@ class PerpMarket:
     maintenance_margin_ratio: int
 
 class PerpApi:
-    def __init__(self, rpc: str, market_id: int, token: Token, abi: list):
+    def __init__(self, rpc: str, market_id: int, abi: list):
         self.web3 = Web3(Web3.HTTPProvider(rpc))
         self.market_id = market_id
-        self.token = token
         self.abi = abi
         self.contract = self.web3.eth.contract(address=PERP_CONTRACT_ADDRESS, abi=abi)
         self.market = self.perp_markets()
         self.b_market = self.perp_b_markets()
+        self.token = Token(address=self.market.token_a_address, decimals=self.market.token_a_decimal, symbol=self.market.token_a)
 
     def place_perp_order(self, account, subaccount: str, is_long: bool, size: float, price: float, order_type: int, leverage: int, take_profit: float, stop_loss: float):
         txn = self.contract.functions.placePerpOrder(

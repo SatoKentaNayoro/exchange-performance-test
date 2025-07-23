@@ -5,6 +5,7 @@ from .binance_exchange import BinanceExchange
 from .hyperliquid_exchange import HyperliquidExchange
 from .binance_websocket_exchange import BinanceWebSocketExchange
 from .config import BINANCE_CONFIG, ENABLE_REST_API, ENABLE_WEBSOCKET_API
+from .safeliquid_exchange import SafeliquidExchange
 
 
 class ExchangeFactory:
@@ -46,5 +47,14 @@ class ExchangeFactory:
             # Note: Hyperliquid does not support WebSocket order placement
             # WebSocket is only available for market data feeds, not order operations
             # All order placement must go through their REST API/SDK
-        
+
+        # Safeliquid exchanges
+        sl_private_key = os.getenv("SAFELIQUID_PRIVATE_KEY")
+        sl_sub_account = os.getenv("SAFELIQUID_SUB_ACCOUNT")
+        sl_sub_market_id = os.getenv("SAFELIQUID_MARKET_ID")
+
+        if sl_private_key and sl_sub_account and sl_sub_market_id:
+            if ENABLE_REST_API:
+                exchanges.append(SafeliquidExchange(sl_sub_account, sl_private_key, int(sl_sub_market_id)))
+
         return exchanges
