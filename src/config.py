@@ -28,6 +28,12 @@ HYPERLIQUID_CONFIG = {
     'default_tick_size': 0.01   # For other assets
 }
 
+SAFELIQUID_CONFIG = {
+    'asset': 'BTC',
+    'tick_size': 1.0,           # $1 tick size for ETH
+    'default_tick_size': 0.01   # For other assets
+}
+
 # Display Configuration
 REFRESH_RATE = 2  # Table refresh rate in Hz (reduced for smoother updates)
 DECIMAL_PLACES = 4  # Precision for latency display
