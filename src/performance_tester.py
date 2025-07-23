@@ -97,8 +97,8 @@ class PerformanceTester:
             self.logger.info(f"Cleaning up {total_orders} open orders across all exchanges")
         
         for exchange in self.exchanges:
-            if exchange.open_orders:
-                cleanup_tasks.append(exchange.cleanup_open_orders())
+            # if exchange.open_orders:
+            cleanup_tasks.append(exchange.cleanup_open_orders())
         
         if cleanup_tasks:
             try:

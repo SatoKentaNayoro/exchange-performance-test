@@ -37,8 +37,16 @@ def test_place_perp_order():
     print("tx hash:", "0x" + tx.hex())
 
 def test_cancel_order():
-    tx = api.cancel_order(account, sub_account, 5)
+    tx = api.cancel_order(account, sub_account, 63)
     print("tx hash:", "0x" + tx.hex())
+
+def test_cancel_all_orders():
+    orders = api.user_active_orders(sub_account)
+    nonce = None
+    for order in orders:
+        result = api.cancel_order(account, sub_account, order.order_id, nonce)
+        if result:
+            nonce = result["nonce"] + 1
 
 def test_close_position():
     price = api.amount_from_chain(api.market.oracle_price, api.b_market.token_a_decimal)
@@ -101,7 +109,8 @@ if __name__ == "__main__":
     # test_withdraw()
     # test_calc_value()
     # test_deposit()
-    test_place_perp_order()
+    # test_place_perp_order()
     # test_cancel_order()
     # test_set_profit_and_loss_point()
     # test_close_position()
+    test_cancel_all_orders()
