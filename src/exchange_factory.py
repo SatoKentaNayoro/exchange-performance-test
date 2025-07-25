@@ -41,7 +41,7 @@ class ExchangeFactory:
         if hl_address and hl_private_key:
             # Create REST API instance
             if ENABLE_REST_API:
-                exchanges.append(HyperliquidExchange(hl_address, hl_private_key))
+                    exchanges.append(HyperliquidExchange(hl_address, hl_private_key))
             
             # Note: Hyperliquid does not support WebSocket order placement
             # WebSocket is only available for market data feeds, not order operations

@@ -349,7 +349,7 @@ class PerformanceTester:
         test_functions = []
         for exchange in self.exchanges:
             test_functions.extend([
-                exchange.test_order_latency,
+                # exchange.test_order_latency,
                 exchange.test_order_latency,  # Test order placement more frequently
             ])
         
@@ -385,29 +385,40 @@ class PerformanceTester:
                 update_interval = 1.0 / self.effective_refresh_rate
                 
                 while self.running:
-                    # Check if we should stop based on duration (if not unlimited)
                     if self.duration_seconds is not None and (time.time() - start_time >= self.duration_seconds):
                         break
-                        
-                    # Randomly select a test function
-                    test_func = random.choice(test_functions)
-                    
-                    try:
-                        self.logger.debug(f"Running test function: {test_func.__self__.name}.{test_func.__name__}")
-                        await test_func()
-                        
-                        # Update the live display with controlled timing for remote terminals
-                        current_time = time.time()
-                        if not self.is_remote_terminal or (current_time - last_update >= update_interval):
-                            live.update(self.generate_stats_table())
-                            if self.is_remote_terminal:
-                                live.refresh()  # Manual refresh for remote terminals
-                            last_update = current_time
-                            
-                    except Exception as e:
-                        self.logger.error(f"Test function {test_func.__self__.name}.{test_func.__name__} failed: {e}", exc_info=True)
-                    
-                    # Wait before next test
+
+                    import threading
+                    threads = []
+                    exceptions = []
+
+                    def thread_worker(func):
+                        try:
+                            asyncio.run(func())
+                        except Exception as e:
+                            exceptions.append((func, e))
+
+                    for _ in range(10):
+                        func = random.choice(test_functions)
+                        t = threading.Thread(target=thread_worker, args=(func,))
+                        t.start()
+                        threads.append(t)
+
+                    for t in threads:
+                        t.join()
+
+                    # 错误日志
+                    for func, e in exceptions:
+                        self.logger.error(f"Test function {func.__name__} failed: {e}", exc_info=True)
+
+                    # 更新统计
+                    current_time = time.time()
+                    if not self.is_remote_terminal or (current_time - last_update >= update_interval):
+                        live.update(self.generate_stats_table())
+                        if self.is_remote_terminal:
+                            live.refresh()
+                        last_update = current_time
+
                     await asyncio.sleep(random.uniform(TEST_INTERVAL_MIN, TEST_INTERVAL_MAX))
 
             # Show final table permanently after Live context ends

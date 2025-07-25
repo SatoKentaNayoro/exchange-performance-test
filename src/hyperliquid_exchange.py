@@ -19,11 +19,11 @@ class HyperliquidExchange(BaseExchange):
         self.wallet_address = wallet_address
         self.private_key = private_key
         self.asset = asset or HYPERLIQUID_CONFIG['asset']
-        self.info = Info(constants.MAINNET_API_URL, skip_ws=True)
+        self.info = Info(constants.TESTNET_API_URL, skip_ws=True)
         
         # Create LocalAccount for signing
         self.account: LocalAccount = eth_account.Account.from_key(private_key)
-        self.exchange = Exchange(self.account, constants.MAINNET_API_URL, account_address=wallet_address)
+        self.exchange = Exchange(self.account, constants.TESTNET_API_URL, account_address=wallet_address)
 
     def _get_tick_size(self, asset: str = "BTC") -> float:
         """Get the correct tick size for Hyperliquid assets"""

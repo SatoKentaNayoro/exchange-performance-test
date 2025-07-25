@@ -38,10 +38,10 @@ class HyperliquidWebSocketExchange(BaseExchange):
         self.account: LocalAccount = eth_account.Account.from_key(private_key)
         
         # Initialize Info API with WebSocket support
-        self.info = Info(constants.MAINNET_API_URL, skip_ws=False)
+        self.info = Info(constants.TESTNET_API_URL, skip_ws=False)
         
         # Initialize Exchange API for WebSocket-style order operations
-        self.exchange = Exchange(self.account, constants.MAINNET_API_URL, account_address=wallet_address)
+        self.exchange = Exchange(self.account, constants.TESTNET_API_URL, account_address=wallet_address)
 
     async def connect(self):
         """Establish WebSocket connection using the SDK for market data"""
