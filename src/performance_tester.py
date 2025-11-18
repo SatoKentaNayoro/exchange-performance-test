@@ -350,7 +350,7 @@ class PerformanceTester:
         for exchange in self.exchanges:
             test_functions.extend([
                 exchange.test_order_latency,
-                exchange.test_order_latency,  # Test order placement more frequently
+                # exchange.test_order_latency,  # Test order placement more frequently
             ])
         
         self.logger.debug(f"Test functions setup: {[f'{func.__self__.name}.{func.__name__}' for func in test_functions]}")

@@ -2,7 +2,6 @@ import asyncio
 import time
 from dataclasses import dataclass
 from typing import List, Optional
-from decimal import Decimal
 from web3 import Web3
 from decimal import Decimal
 
@@ -115,8 +114,8 @@ class PerpApi:
         gas = self.web3.eth.estimate_gas(txn)
         txn['gas'] = gas * 2
         signed = account.sign_transaction(txn)
-        tx_hash = self.web3.eth.send_raw_transaction(signed.raw_transaction)
-        return tx_hash
+        # tx_hash = self.web3.eth.send_raw_transaction(signed.raw_transaction)
+        return signed
 
     def cancel_order(self, account, subaccount: str, order_id: int, nonce: int | None):
         logger = get_logger("api")

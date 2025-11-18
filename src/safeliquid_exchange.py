@@ -26,7 +26,7 @@ class SafeliquidExchange(BaseExchange):
         self.sub_account = sub_account
         self.account = Web3().eth.account.from_key(private_key)
 
-        abi_path = os.path.join(os.path.dirname(__file__), "../abis/perp_abi.json")
+        abi_path = os.path.join(os.path.dirname(__file__), "../abis/PerpMarketAbi.json")
         with open(abi_path, "r") as f:
             abi = json.load(f)
 

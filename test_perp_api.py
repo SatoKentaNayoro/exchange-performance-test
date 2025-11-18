@@ -14,7 +14,7 @@ def mock_token():
     return Token(address="0x86bde473a14bc71e5c145bb9ee723ef7c3ccce6f", decimals=18, symbol="ETH")
 
 def mock_abi():
-    abi_path = os.path.join(os.path.dirname(__file__), "abis/perp_abi.json")
+    abi_path = os.path.join(os.path.dirname(__file__), "abis/PerpMarketAbi.json")
     with open(abi_path, "r") as f:
         abi = json.load(f)
     return abi
